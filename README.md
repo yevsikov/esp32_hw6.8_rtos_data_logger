@@ -18,7 +18,7 @@ This project demonstrates:
 
 - **ESP32-S3 N16R8**
 - **BME280** — temperature, humidity, pressure sensor
-- **DS1306** — real-time clock for timestamp
+- **DS1307** — real-time clock for timestamp
 - **SSD1306** — OLED display
 - UART terminal for commands
 
@@ -28,7 +28,7 @@ The microcontroller wakes up every **1 second**.
 
 On each wake cycle it:
 
-1. reads current time from **DS1306**
+1. reads current time from **DS1307**
 2. reads temperature, humidity, and pressure from **BME280**
 3. updates the **SSD1306** display
 4. decides whether it is time to save a log record
@@ -47,7 +47,7 @@ The project uses **5 FreeRTOS tasks**:
 ### 1. Sensor Task
 Responsible for:
 - reading BME280
-- reading DS1306
+- reading DS1307
 - building one log record
 - sending it to `sensor_queue`
 
@@ -81,12 +81,13 @@ Responsible for:
 ## Synchronization
 
 ### Mutex
-The project uses an **I2C Mutex** because multiple devices share the bus:
+The project uses an **I2C Mutex** because two devices share the bus:
 
-- BME280
+- DS1307
 - SSD1306
 
 Only one task may use the I2C bus at a time.
+The BME280 in the example is connected over SPI, so it does not use this mutex.
 
 ### Queues
 The project uses the following queues:
@@ -94,6 +95,13 @@ The project uses the following queues:
 - `sensor_queue` — Sensor Task → Manager Task
 - `command_queue` — UART Task → Manager Task
 - `display_queue` — Manager Task → Display Task
+
+The sensor queue holds 2 records, the command queue holds 5 commands, and
+the display queue holds the latest snapshot. The 13-byte packed log record
+stores temperature and humidity multiplied by 100.
+The queues and mutex are created during startup. Queue messages are copied by
+FreeRTOS, so each message type is a value structure rather than a pointer to a
+task's temporary data.
 
 ## Logging format
 
@@ -163,11 +171,9 @@ This demonstrates basic energy-saving behavior while still keeping the system re
 
 ## UART commands
 
-Supported commands:
+Planned commands:
 
-- `help` — show command list
 - `status` — show current system status
 - `flush` — force write current RAM buffer to flash
-- `erase` — erase log partition and clear log buffer
 - `log on` — enable logging
 - `log off` — disable logging
