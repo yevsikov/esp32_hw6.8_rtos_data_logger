@@ -51,6 +51,9 @@ Responsible for:
 - building one log record
 - sending it to `sensor_queue`
 
+In the current learning step, the Sensor Task reads and sends the DS1307
+timestamp. BME280 sampling will be added next.
+
 ### 2. UART Task
 Responsible for:
 - receiving text commands from UART
@@ -70,6 +73,10 @@ Responsible for:
 - deciding when to append a record to the RAM buffer
 - forcing flash flush when the buffer is full
 - entering Light Sleep for 1 second
+
+The current Manager Task receives timestamps from `sensor_queue` and prints
+them to UART. Its logging, command-handling, and sleep responsibilities will
+be added in later steps.
 
 ### 5. Flash Writer Task
 Responsible for:
@@ -96,9 +103,10 @@ The project uses the following queues:
 - `command_queue` — UART Task → Manager Task
 - `display_queue` — Manager Task → Display Task
 
-The sensor queue holds 2 records, the command queue holds 5 commands, and
-the display queue holds the latest snapshot. The 13-byte packed log record
-stores temperature and humidity multiplied by 100.
+The sensor queue holds 2 messages (currently RTC timestamps), the command
+queue holds 5 commands, and the display queue holds the latest snapshot.
+The packed log record is 13 bytes; temperature and humidity are stored
+multiplied by 100.
 The queues and mutex are created during startup. Queue messages are copied by
 FreeRTOS, so each message type is a value structure rather than a pointer to a
 task's temporary data.
