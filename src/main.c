@@ -3,8 +3,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define I2C_SCL 4
-#define I2C_SDA 5
+#define I2C_SCL 9
+#define I2C_SDA 8
 #define I2C_MASTER_NUM I2C_NUM_0
 #define DS1307_ADDR 0x68 // DS1307 I2C address
 
