@@ -145,6 +145,10 @@ Important design decisions:
   - warning is printed through UART
   - warning is shown on the OLED display
 
+The checked-in `partitions.csv` targets an **8 MB** flash module. It reserves
+2 MB for the application and assigns the remaining `0x5F0000` bytes to
+`logdata`. Verify the module's actual flash size before flashing this layout.
+
 ## Sleep behavior
 
 The system uses **Light Sleep** with timer wakeup.
