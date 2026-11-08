@@ -9,6 +9,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "ssd1306_display.h"
 
 #define I2C_SCL 9
 #define I2C_SDA 8
@@ -239,6 +240,18 @@ static esp_err_t init_ds1307_i2c(void)
     return i2c_driver_install(I2C_MASTER_NUM, conf.mode, 0, 0, 0);
 }
 
+static esp_err_t init_display(void)
+{
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000)) != pdTRUE)
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t err = ssd1306_display_init();
+    xSemaphoreGive(i2c_mutex);
+    return err;
+}
+
 static bool bcd_to_decimal(uint8_t bcd, uint8_t *value)
 {
     uint8_t high = (bcd >> 4) & 0x0F;
@@ -400,6 +413,7 @@ static void sensor_task(void *pvParameters)
 static void manager_task(void *pvParameters)
 {
     log_record_t record;
+    display_snapshot_t snapshot;
 
     while (1)
     {
@@ -422,6 +436,61 @@ static void manager_task(void *pvParameters)
                    (unsigned int)(record.humidity_pct_x100 / 100),
                    (unsigned int)(record.humidity_pct_x100 % 100),
                    (unsigned int)record.pressure_mmhg);
+
+            snapshot.record = record;
+            snapshot.logging_enabled = false;
+            snapshot.partition_full = false;
+            if (xQueueOverwrite(display_queue, &snapshot) != pdPASS)
+            {
+                printf("Display queue update failed\n");
+            }
+        }
+    }
+}
+
+static void display_task(void *pvParameters)
+{
+    display_snapshot_t snapshot;
+    char lines[SSD1306_DISPLAY_LINE_COUNT][SSD1306_DISPLAY_LINE_LENGTH];
+
+    while (1)
+    {
+        if (xQueueReceive(display_queue, &snapshot, portMAX_DELAY) == pdPASS)
+        {
+            int32_t temperature_x100 = snapshot.record.temperature_c_x100;
+            uint16_t temperature_magnitude = (uint16_t)(temperature_x100 < 0
+                                                            ? -temperature_x100
+                                                            : temperature_x100);
+            snprintf(lines[0], sizeof(lines[0]), "%04u-%02u-%02u",
+                     (unsigned int)snapshot.record.year,
+                     (unsigned int)snapshot.record.month,
+                     (unsigned int)snapshot.record.day);
+            snprintf(lines[1], sizeof(lines[1]), "%02u:%02u:%02u",
+                     (unsigned int)snapshot.record.hour,
+                     (unsigned int)snapshot.record.minute,
+                     (unsigned int)snapshot.record.second);
+            snprintf(lines[2], sizeof(lines[2]), "T: %s%u.%02u C",
+                     temperature_x100 < 0 ? "-" : "",
+                     (unsigned int)(temperature_magnitude / 100),
+                     (unsigned int)(temperature_magnitude % 100));
+            snprintf(lines[3], sizeof(lines[3]), "H: %u.%02u %%",
+                     (unsigned int)(snapshot.record.humidity_pct_x100 / 100),
+                     (unsigned int)(snapshot.record.humidity_pct_x100 % 100));
+            snprintf(lines[4], sizeof(lines[4]), "P: %u mmHg",
+                     (unsigned int)snapshot.record.pressure_mmhg);
+
+            if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000)) != pdTRUE)
+            {
+                printf("Display I2C mutex timeout\n");
+                continue;
+            }
+
+            esp_err_t err = ssd1306_display_write_lines(lines);
+            xSemaphoreGive(i2c_mutex);
+            if (err != ESP_OK)
+            {
+                printf("SSD1306 update failed: %s\n", esp_err_to_name(err));
+            }
         }
     }
 }
@@ -430,11 +499,15 @@ void app_main(void)
 {
     ESP_ERROR_CHECK(init_rtos_objects());
     ESP_ERROR_CHECK(init_ds1307_i2c());
+    ESP_ERROR_CHECK(init_display());
     ESP_ERROR_CHECK(init_bme280());
     ESP_ERROR_CHECK(xTaskCreate(sensor_task, "sensor_task", 3072, NULL, 5, NULL) == pdPASS
                         ? ESP_OK
                         : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(manager_task, "manager_task", 2048, NULL, 4, NULL) == pdPASS
+                        ? ESP_OK
+                        : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(display_task, "display_task", 3072, NULL, 3, NULL) == pdPASS
                         ? ESP_OK
                         : ESP_ERR_NO_MEM);
 }

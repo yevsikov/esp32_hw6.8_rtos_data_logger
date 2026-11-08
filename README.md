@@ -65,6 +65,10 @@ Responsible for:
 - receiving display snapshots from `display_queue`
 - updating SSD1306
 
+The Display Task currently shows the date, time, temperature, humidity, and
+pressure on the OLED. It uses the I2C mutex while updating the display so it
+does not collide with the RTC read.
+
 ### 4. Manager Task
 Responsible for:
 - coordinating the whole application
@@ -74,9 +78,10 @@ Responsible for:
 - forcing flash flush when the buffer is full
 - entering Light Sleep for 1 second
 
-The current Manager Task receives complete sensor records from `sensor_queue`
-and prints them to UART. Its logging, command-handling, and sleep
-responsibilities will be added in later steps.
+The current Manager Task receives complete sensor records from `sensor_queue`,
+prints them to UART, and sends the latest snapshot to `display_queue`. Its
+logging, command-handling, and sleep responsibilities will be added in later
+steps.
 
 ### 5. Flash Writer Task
 Responsible for:
@@ -110,7 +115,8 @@ The project uses the following queues:
 - `display_queue` — Manager Task → Display Task
 
 The sensor queue holds 2 complete log records, the command
-queue holds 5 commands, and the display queue holds the latest snapshot.
+queue holds 5 commands, and the length-1 display queue holds the latest
+snapshot.
 The packed log record is 13 bytes; temperature and humidity are stored
 multiplied by 100.
 The queues and mutex are created during startup. Queue messages are copied by
