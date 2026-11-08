@@ -17,7 +17,7 @@ This project demonstrates:
 ## Hardware
 
 - **ESP32-S3 N16R8**
-- **BME280** — temperature, humidity, pressure sensor
+- **BME280** — temperature, humidity, pressure sensor (SPI)
 - **DS1307** — real-time clock for timestamp
 - **SSD1306** — OLED display
 - UART terminal for commands
@@ -51,8 +51,8 @@ Responsible for:
 - building one log record
 - sending it to `sensor_queue`
 
-In the current learning step, the Sensor Task reads and sends the DS1307
-timestamp. BME280 sampling will be added next.
+The Sensor Task reads the DS1307 timestamp and BME280 measurements, then
+sends a complete log record to `sensor_queue`.
 
 ### 2. UART Task
 Responsible for:
@@ -74,9 +74,9 @@ Responsible for:
 - forcing flash flush when the buffer is full
 - entering Light Sleep for 1 second
 
-The current Manager Task receives timestamps from `sensor_queue` and prints
-them to UART. Its logging, command-handling, and sleep responsibilities will
-be added in later steps.
+The current Manager Task receives complete sensor records from `sensor_queue`
+and prints them to UART. Its logging, command-handling, and sleep
+responsibilities will be added in later steps.
 
 ### 5. Flash Writer Task
 Responsible for:
@@ -96,6 +96,12 @@ The project uses an **I2C Mutex** because two devices share the bus:
 Only one task may use the I2C bus at a time.
 The BME280 in the example is connected over SPI, so it does not use this mutex.
 
+The BME280 uses SPI with CS=GPIO 10, MOSI=GPIO 11, MISO=GPIO 13, and
+SCK=GPIO 12. Its Bosch SensorAPI source is included in `components/bme280`
+under the BSD-3-Clause license (upstream commit
+`c90d419492e26dd95586598a794e65eb2760753a`). The SPI adapter connects that
+API to ESP-IDF; the SensorAPI handles calibration and measurement compensation.
+
 ### Queues
 The project uses the following queues:
 
@@ -103,7 +109,7 @@ The project uses the following queues:
 - `command_queue` — UART Task → Manager Task
 - `display_queue` — Manager Task → Display Task
 
-The sensor queue holds 2 messages (currently RTC timestamps), the command
+The sensor queue holds 2 complete log records, the command
 queue holds 5 commands, and the display queue holds the latest snapshot.
 The packed log record is 13 bytes; temperature and humidity are stored
 multiplied by 100.
